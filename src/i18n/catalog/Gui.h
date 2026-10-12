@@ -3548,6 +3548,12 @@ SS_MSG(nav_turntable,
     ES("Plato giratorio"), PT("Mesa giratória"), IT("Piatto rotante"),
     NL("Draaitafel"),   RU("Поворотный стол"), TR("Döner tabla"));
 
+SS_MSG(nav_lock_up,
+    EN("Lock up direction"), JA("上方向を固定"), ZH_HANS("锁定上方向"), ZH_HANT("鎖定上方向"),
+    KO("위쪽 방향 고정"), DE("Oben-Richtung fixieren"), FR("Verrouiller la verticale"),
+    ES("Bloquear dirección vertical"), PT("Fixar direção vertical"), IT("Blocca direzione verticale"),
+    NL("Bovenrichting vastzetten"), RU("Зафиксировать направление вверх"), TR("Yukarı yönünü kilitle"));
+
 SS_MSG(nav_trackball,
     EN("Trackball"),    JA("トラックボール"),  ZH_HANS("轨迹球"),  ZH_HANT("軌跡球"),
     KO("트랙볼"),        DE("Trackball"),     FR("Trackball"),   ES("Trackball"),

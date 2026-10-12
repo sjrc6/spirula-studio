@@ -202,7 +202,11 @@ bool ViewportPanel::maybe_frame(const spirula::TrainerSession& session) {
 }
 
 void ViewportPanel::reset_view() {
+    const bool lock_up = _cam.lock_up;
+    const auto mode = _cam.mode;
     _cam = _home;
+    _cam.mode = mode;
+    _cam.set_lock_up(lock_up);
     _dirty = true;
 }
 
@@ -495,8 +499,8 @@ void ViewportPanel::set_nav_up(const float up[3]) {
     if (u[0]*was[0] + u[1]*was[1] + u[2]*was[2] > 0.99999f) return;
     for (NavCamera* c : {&_cam, &_home}) {
         for (int k = 0; k < 3; k++) c->world_up[k] = u[k];
-        // What these modes keep level; the others roll where the user put them.
-        if (c->mode == NavCamera::Turntable || c->mode == NavCamera::Fps) c->level_roll();
+        if (c->lock_up || c->mode == NavCamera::Turntable || c->mode == NavCamera::Fps)
+            c->level_roll();
     }
     _dirty = true;
 }
@@ -1676,6 +1680,13 @@ void ViewportPanel::draw_nav_controls() {
     ui::help_on_hover(msg::viewport_nav_help,
                       {kNavModes[0]->get(), kNavModes[1]->get(),
                        kNavModes[2]->get(), kNavModes[3]->get()});
+    place(ImGui::GetFrameHeight() + st.ItemInnerSpacing.x + text_w(msg::nav_lock_up.get()));
+    bool lock_up = _cam.lock_up;
+    if (ui::Checkbox(msg::nav_lock_up, &lock_up)) {
+        _cam.set_lock_up(lock_up);
+        _anim = _frame_anim = false;
+        _dirty = true;
+    }
     place(px(100.0f));
     ImGui::SetNextItemWidth(px(100.0f));
     ui::SliderFloatRaw("##speed", &_cam.speed_exp, -2.0f, 2.0f, "spd 10^%.1f");

@@ -1,18 +1,6 @@
 #pragma once
 
-// NavCamera -- 1:1 C++ port of the web viewer's camera state + Nav object
-// (viewer.html: `cam`, `quat`, `Nav`). Same quaternion camera (OpenGL
-// convention c2w, -Z forward), same four navigation modes (Turntable /
-// Trackball / First Person / Free Fly), and the same sensitivities, so the
-// native viewport feels identical to the browser client:
-//   orbit  0.005 rad/px      look   0.003 rad/px
-//   pan    speed * 0.002 world-units/px
-//   dolly  exp(delta * 0.004 * speed * 0.2) (orbit modes) / forward move
-//   keyboard  speed * 1.0 units/s   gamepad look  0.4 rad/s per stick unit
-// speed = 10^speed_exp (the browser's Move Speed slider).
-//
-// Keep edits in sync with viewer.html's Nav -- including its quirks (e.g.
-// gamepad triggers only translate while the left stick is deflected).
+// OpenGL camera-to-world rotation: -Z forward, with a scene-defined up axis.
 
 namespace gui {
 
@@ -23,6 +11,8 @@ struct NavCamera {
     float rot[4] = {0, 0, 0, 1};   // (x,y,z,w), camera-to-world rotation
     float target[3] = {0, 0, 0};   // orbit / turntable pivot
     Mode mode = Turntable;
+    bool lock_up = false;
+    void set_lock_up(bool enabled);
     // What Turntable orbits about, First Person turns about and E/Q move
     // along: +Z, as in the browser, unless the scene's own up is known to be
     // another axis. Unit length.
@@ -65,6 +55,10 @@ struct NavCamera {
     // Turn about the view axis until the camera's right is level with
     // world_up; a camera looking along world_up is left alone.
     void level_roll();
+
+private:
+    void rotate_upright(float dx, float dy, float sensitivity);
+    void movement_axes(float forward[3], float right[3]) const;
 };
 
 // Any connected gamepad deflected past gamepad_tick's deadzone.

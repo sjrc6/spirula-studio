@@ -462,6 +462,13 @@ ss_configure_app(frame_mask_test)
 # dataset run are kept or redone, and the preset serializers. Named rather
 # than globbed -- each such test names its own sources.
 if(SS_BUILD_GUI)
+    add_executable(nav_camera_test
+        ${SS_SRC}/app/gui/tests/nav_camera_test.cpp
+        ${SS_SRC}/app/gui/NavCamera.cpp)
+    target_include_directories(nav_camera_test PRIVATE ${SS_SRC} ${imgui_SOURCE_DIR})
+    target_link_libraries(nav_camera_test PRIVATE glfw)
+    set_property(TARGET nav_camera_test PROPERTY CXX_STANDARD 17)
+
     add_executable(command_argv_test
         ${SS_SRC}/app/gui/tests/command_argv_test.cpp
         ${SS_SRC}/app/gui/Subprocess.cpp)

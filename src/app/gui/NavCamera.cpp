@@ -7,6 +7,7 @@
 
 #include "imgui.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstring>
@@ -158,6 +159,10 @@ void NavCamera::transform(const float S[12]) {
 }
 
 void NavCamera::level_roll() {
+    if (lock_up) {
+        rotate_upright(0, 0, 0);
+        return;
+    }
     float f[3], r[3], want[3];
     axis_forward(f);
     axis_right(r);
@@ -190,19 +195,54 @@ void NavCamera::axis_forward(float v[3]) const {
     q_rot_vec(rot, e, v);
 }
 
+void NavCamera::set_lock_up(bool enabled) {
+    lock_up = enabled;
+    if (enabled) rotate_upright(0, 0, 0);
+}
+
+void NavCamera::rotate_upright(float dx, float dy, float sensitivity) {
+    float f[3], right[3], horizontal[3];
+    axis_forward(f);
+    axis_right(right);
+    const float elevation = std::asin(std::clamp(v_dot(f, world_up), -1.0f, 1.0f));
+    for (int k = 0; k < 3; k++)
+        horizontal[k] = f[k] - world_up[k] * v_dot(f, world_up);
+    if (v_len(horizontal) < 1e-4f) v_cross(world_up, right, horizontal);
+    v_norm(horizontal, horizontal);
+    float yaw[4];
+    q_from_axis_angle(world_up, -dx * sensitivity, yaw);
+    q_rot_vec(yaw, horizontal, horizontal);
+    // Stay short of the poles, where the horizon has no unique direction.
+    constexpr float limit = 1.57079632679f - 0.001f;
+    const float pitch = std::clamp(elevation - dy * sensitivity, -limit, limit);
+    for (int k = 0; k < 3; k++)
+        f[k] = horizontal[k] * std::cos(pitch) + world_up[k] * std::sin(pitch);
+    float up[3];
+    v_cross(f, world_up, right);
+    v_norm(right, right);
+    v_cross(right, f, up);
+    const float m[9] = {right[0], right[1], right[2], up[0], up[1], up[2],
+                        -f[0], -f[1], -f[2]};
+    mat3_to_quat(m, rot);
+    q_norm(rot);
+}
+
 void NavCamera::orbit(float dx, float dy) {
     const float sensitivity = 0.005f;
-    float right[3], up[3];
-    axis_right(right);
-    if (mode == Trackball) axis_up(up);
-    else { up[0] = world_up[0]; up[1] = world_up[1]; up[2] = world_up[2]; }
-    float qa[4], qb[4], qab[4];
-    q_from_axis_angle(up, -dx * sensitivity, qa);
-    q_from_axis_angle(right, -dy * sensitivity, qb);
-    q_mul(qa, qb, qab);
-    q_mul(qab, rot, rot);
-    q_norm(rot);
-    // Keep camera on the orbit sphere.
+    if (lock_up) {
+        rotate_upright(dx, dy, sensitivity);
+    } else {
+        float right[3], up[3];
+        axis_right(right);
+        if (mode == Trackball) axis_up(up);
+        else { up[0] = world_up[0]; up[1] = world_up[1]; up[2] = world_up[2]; }
+        float qa[4], qb[4], qab[4];
+        q_from_axis_angle(up, -dx * sensitivity, qa);
+        q_from_axis_angle(right, -dy * sensitivity, qb);
+        q_mul(qa, qb, qab);
+        q_mul(qab, rot, rot);
+        q_norm(rot);
+    }
     float d[3];
     v_sub(pos, target, d);
     float dist = v_len(d);
@@ -214,6 +254,10 @@ void NavCamera::orbit(float dx, float dy) {
 }
 
 void NavCamera::look(float dx, float dy) {
+    if (lock_up) {
+        rotate_upright(dx, dy, 0.003f);
+        return;
+    }
     const float s = 0.003f;
     float up[3], right[3], qa[4], qb[4];
     axis_up(up);
@@ -261,8 +305,8 @@ void NavCamera::dolly(float delta) {
         v_add(target, d, pos);
     } else {
         // Move forward.
-        float fwd[3], step[3];
-        axis_forward(fwd);
+        float fwd[3], right[3], step[3];
+        movement_axes(fwd, right);
         v_scale(fwd, -delta * 0.004f * s, step);
         v_add(pos, step, pos);
         v_add(target, step, target);
@@ -270,6 +314,7 @@ void NavCamera::dolly(float delta) {
 }
 
 void NavCamera::roll(float delta) {
+    if (lock_up) return;
     float fwd[3], q[4];
     axis_forward(fwd);
     q_from_axis_angle(fwd, delta, q);
@@ -277,19 +322,29 @@ void NavCamera::roll(float delta) {
     q_norm(rot);
 }
 
+void NavCamera::movement_axes(float forward[3], float right[3]) const {
+    axis_forward(forward);
+    axis_right(right);
+    if (!lock_up) return;
+    const float vertical = v_dot(right, world_up);
+    for (int k = 0; k < 3; k++) right[k] -= world_up[k] * vertical;
+    v_norm(right, right);
+    v_cross(world_up, right, forward);
+    v_norm(forward, forward);
+}
+
 bool NavCamera::keyboard_tick(float dt, const Keys& k) {
     const float s = speed() * dt * 1.0f;   // translate speed
     const float sr = dt * 1.0f;            // rotate speed
     float fwd[3], right[3];
-    axis_forward(fwd);
-    axis_right(right);
+    movement_axes(fwd, right);
     float move[3] = {0, 0, 0}, step[3];
     float rotate = 0.0f;
     if (k.w || k.up)    { v_scale(fwd, s, step);    v_add(move, step, move); }
     if (k.s || k.down)  { v_scale(fwd, -s, step);   v_add(move, step, move); }
     if (k.a || k.left)  { v_scale(right, -s, step); v_add(move, step, move); }
     if (k.d || k.right) { v_scale(right, s, step);  v_add(move, step, move); }
-    if (mode == Fly || mode == Trackball) {
+    if (!lock_up && (mode == Fly || mode == Trackball)) {
         if (k.e) rotate -= sr;
         if (k.q) rotate += sr;
     } else {
@@ -326,8 +381,7 @@ bool NavCamera::gamepad_tick(float dt) {
             std::fabs(ly) > kGamepadDeadzone) {
             const float s = speed() * dt * 1.0f;
             float fwd[3], right[3], move[3], step[3];
-            axis_forward(fwd);
-            axis_right(right);
+            movement_axes(fwd, right);
             v_scale(right, lx * s, move);
             v_scale(fwd, -ly * s, step);
             v_add(move, step, move);
